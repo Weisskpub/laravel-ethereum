@@ -26,6 +26,20 @@ class Client
     protected $rpcId = 0;
 
     /**
+     * JSON-RPC version.
+     *
+     * @var int
+     */
+    protected $rpcVersion = '2.0';
+
+    /**
+     * Wei divisor.
+     *
+     * @var int
+     */
+    protected $weiDivisor = '1000000000000000000';
+
+    /**
      * Constructs new client.
      *
      * @param mixed $config
@@ -49,6 +63,9 @@ class Client
         $this->client = new GuzzleHttp([
             'base_uri'    => "${config['scheme']}://${config['host']}:${config['port']}",
             'handler'     => $handlerStack,
+            'headers' => [
+                'Content-Type' => 'application/json'
+            ]
         ]);
     }
 
@@ -62,9 +79,9 @@ class Client
     public function getConfig($option = null)
     {
         return (
-                isset($this->client) &&
-                $this->client instanceof ClientInterface
-            ) ? $this->client->getConfig($option) : false;
+            isset($this->client) &&
+            $this->client instanceof ClientInterface
+        ) ? $this->client->getConfig($option) : false;
     }
 
     /**
@@ -103,9 +120,10 @@ class Client
     {
         try {
             $json = [
-                'method' => strtolower($method),
-                'params' => (array) $params,
-                'id'     => $this->rpcId++,
+                'method'  => $method,
+                'params'  => (array) $params,
+                'id'      => ++$this->rpcId,
+                'jsonrpc' => $this->rpcVersion,
             ];
 
             $response = $this->client->request('POST', '/', ['json' => $json]);
@@ -150,7 +168,7 @@ class Client
         callable $onRejected = null)
     {
         $json = [
-            'method' => strtolower($method),
+            'method' => $method,
             'params' => (array) $params,
             'id'     => $this->rpcId++,
         ];
@@ -254,5 +272,60 @@ class Client
         }
 
         return $config;
+    }
+
+    /**
+     * Convert wei value to ethereum.
+     *
+     * @param mixed $wei
+     *
+     * @return float
+     */
+    public function weiToEth($wei) : float
+    {
+        return (float)bcdiv($this->decode_hex($wei), $this->weiDivisor,strlen($this->weiDivisor) - 1);
+    }
+
+
+    /**
+     * Convert ethereum value to wei.
+     *
+     * @param mixed $wei
+     *
+     * @return string
+     */
+    public function ethToWei($eth) : string
+    {
+        return $this->encode_hex($eth * $this->weiDivisor);
+    }
+
+    /**
+     * Decode hex value.
+     *
+     * @param mixed $input
+     *
+     * @return mixed
+     */
+    public function decode_hex($input)
+    {
+        if (substr($input, 0, 2) === '0x') {
+            $input = substr($input, 2);
+        }
+        if (preg_match('/[a-f]+/', $input)) {
+            return hexdec($input);
+        }
+        return $input;
+    }
+
+    /**
+     * Encode value to hex.
+     *
+     * @param mixed $input
+     *
+     * @return string
+     */
+    public function encode_hex($input) : string
+    {
+        return '0x' . dechex($input);
     }
 }
